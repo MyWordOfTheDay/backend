@@ -2,6 +2,7 @@ package mail
 
 import (
 	"bytes"
+	"embed"
 	"fmt"
 	pkgtemplate "html/template"
 	"net/smtp"
@@ -31,17 +32,12 @@ type Client struct {
 // New accepts Config and an optional template and returns a configered Client
 //
 // If a template is not required, simply pass an empty string
-func New(c Config, template string) (*Client, error) {
+func New(c Config, template embed.FS, patterns ...string) (*Client, error) {
 	auth := smtp.PlainAuth("", c.SMTPFromAddress, c.SMTPPassword, c.SMTPHost)
 
-	var t *pkgtemplate.Template
-	if template != "" {
-		var err error
-
-		t, err = pkgtemplate.ParseFiles(template)
-		if err != nil {
-			return nil, err
-		}
+	t, err := pkgtemplate.ParseFS(template, patterns...)
+	if err != nil {
+		return nil, err
 	}
 
 	return &Client{

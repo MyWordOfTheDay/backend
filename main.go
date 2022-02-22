@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"embed"
 	"fmt"
 	"log"
 	"net"
@@ -20,6 +21,9 @@ import (
 	"github.com/mywordoftheday/backend/internal/server"
 	v1alpha1 "github.com/mywordoftheday/proto/mywordoftheday/v1alpha1"
 )
+
+//go:embed templates
+var templates embed.FS
 
 func init() {
 	// Log as JSON instead of the default ASCII formatter.
@@ -162,7 +166,7 @@ func main() {
 			SMTPPassword:    smtpPassword,
 			SMTPFromAddress: smtpFromAddress,
 			SMTPToAddresses: smtpToAddresses,
-		}, "template.html")
+		}, templates, "templates/template.html")
 		if err != nil {
 			log.Fatalf("Error creating new mail client: %+v", err)
 		}
