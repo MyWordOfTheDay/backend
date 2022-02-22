@@ -125,3 +125,35 @@ func TestDeleteWord(t *testing.T) {
 		})
 	})
 }
+
+func TestRandomWord(t *testing.T) {
+	wm := &wordMock{}
+	s := Server{wordQuerier: wm}
+
+	t.Run("Given a request to ListWords", func(t *testing.T) {
+		t.Run("When an error is returned", func(t *testing.T) {
+			t.Run("Then the error is returned to the caller", func(t *testing.T) {
+				wm.err = errors.New("an error")
+
+				r, err := s.RandomWord(context.Background(), &v1alpha1.RandomWordRequest{})
+				assert.EqualError(t, err, "unable to get words: an error")
+				assert.Nil(t, r)
+			})
+		})
+		t.Run("When no error is returned", func(t *testing.T) {
+			t.Run("Then a random word is returned", func(t *testing.T) {
+				wm.err = nil
+				wm.listWordsResponse = []db.Word{{ID: 45, Word: "word1"}, {ID: 1, Word: "word2", CustomDefinition: "a custom definition here"}}
+
+				r, err := s.RandomWord(context.Background(), &v1alpha1.RandomWordRequest{})
+				assert.NoError(t, err)
+
+				isValidID := r.GetWord().GetId() == 1 || r.GetWord().GetId() == 45
+				isValidWord := r.GetWord().GetWord() == "word1" || r.GetWord().GetWord() == "word2"
+
+				assert.True(t, isValidID)
+				assert.True(t, isValidWord)
+			})
+		})
+	})
+}

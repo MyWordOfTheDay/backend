@@ -1,0 +1,16 @@
+---
+version: "3"
+services:
+  # The database for mywordoftheday
+  mywordoftheday_db:
+    container_name: mywordoftheday_db_dev
+    image: postgres
+    environment:
+      - POSTGRES_PASSWORD=supersecretpassword
+      - POSTGRES_USER=mywordoftheday
+      - POSTGRES_DB=mywordoftheday
+    volumes:
+      - ${HOME}/mywordoftheday/local/dev/db:/var/lib/postgresql/data
+    ports:
+      - 5432:5432
+    restart: unless-stopped
