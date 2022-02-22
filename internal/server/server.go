@@ -2,6 +2,8 @@ package server
 
 import (
 	"context"
+	"crypto/rand"
+	"math/big"
 
 	"github.com/mywordoftheday/backend/internal/db"
 	v1alpha1 "github.com/mywordoftheday/proto/mywordoftheday/v1alpha1"
@@ -104,4 +106,32 @@ func (s *Server) DeleteWord(ctx context.Context, req *v1alpha1.DeleteWordRequest
 			CustomDefinition: rsp.CustomDefinition,
 		},
 	}, nil
+}
+
+func (s *Server) RandomWord(ctx context.Context, req *v1alpha1.RandomWordRequest) (*v1alpha1.RandomWordResponse, error) {
+	rsp, err := s.wordQuerier.ListWords(ctx)
+	if err != nil {
+		return nil, errors.Wrap(err, "unable to get words")
+	}
+
+	if len(rsp) == 0 {
+		return &v1alpha1.RandomWordResponse{}, nil
+	}
+
+	i, err := getRandNumber(0, int64(len(rsp)))
+	if err != nil {
+		return nil, err
+	}
+
+	return &v1alpha1.RandomWordResponse{
+		Word: &v1alpha1.Word{
+			Id:               rsp[i.Int64()].ID,
+			Word:             rsp[i.Int64()].Word,
+			CustomDefinition: rsp[i.Int64()].CustomDefinition,
+		},
+	}, nil
+}
+
+func getRandNumber(min int, max int64) (*big.Int, error) {
+	return rand.Int(rand.Reader, big.NewInt(max))
 }

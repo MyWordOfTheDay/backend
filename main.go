@@ -3,17 +3,20 @@ package main
 import (
 	"context"
 	"fmt"
+	"log"
 	"net"
 	"net/http"
 	"os"
 	"strings"
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	"github.com/robfig/cron/v3"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 
+	"github.com/mywordoftheday/backend/internal/mail"
 	"github.com/mywordoftheday/backend/internal/server"
 	v1alpha1 "github.com/mywordoftheday/proto/mywordoftheday/v1alpha1"
 )
@@ -50,11 +53,21 @@ func main() {
 	handleBindEnvErr(viper.BindEnv("server.port", "SERVER_PORT"))
 	handleBindEnvErr(viper.BindEnv("server.httpProxy.enabled", "HTTP_PROXY_ENABLED"))
 	handleBindEnvErr(viper.BindEnv("server.httpProxy.port", "HTTP_PROXY_PORT"))
+
 	handleBindEnvErr(viper.BindEnv("db.host", "DB_HOST"))
 	handleBindEnvErr(viper.BindEnv("db.port", "DB_PORT"))
 	handleBindEnvErr(viper.BindEnv("db.username", "DB_USERNAME"))
 	handleBindEnvErr(viper.BindEnv("db.password", "DB_PASSWORD"))
 	handleBindEnvErr(viper.BindEnv("db.name", "DB_NAME"))
+
+	handleBindEnvErr(viper.BindEnv("smtp.enabled", "SMTP_ENABLED"))
+	handleBindEnvErr(viper.BindEnv("smtp.schedule", "SMTP_SCHEDULE"))
+	handleBindEnvErr(viper.BindEnv("smtp.host", "SMTP_HOST"))
+	handleBindEnvErr(viper.BindEnv("smtp.port", "SMTP_PORT"))
+	handleBindEnvErr(viper.BindEnv("smtp.username", "SMTP_USERNAME"))
+	handleBindEnvErr(viper.BindEnv("smtp.password", "SMTP_PASSWORD"))
+	handleBindEnvErr(viper.BindEnv("smtp.fromAddress", "SMTP_FROM_ADDRESS"))
+	handleBindEnvErr(viper.BindEnv("smtp.toAddresses", "SMTP_TO_ADDRESSES"))
 
 	// Merge config
 	if err := viper.MergeInConfig(); err != nil {
@@ -99,6 +112,15 @@ func main() {
 		dbUsername = viper.GetString("db.username")
 		dbPassword = viper.GetString("db.password")
 		dbName     = viper.GetString("db.name")
+
+		smtpEnabled     = viper.GetBool("smtp.enabled")
+		smtpSchedule    = viper.GetString("smtp.schedule")
+		smtpHost        = viper.GetString("smtp.host")
+		smtpPort        = viper.GetString("smtp.port")
+		smtpUsername    = viper.GetString("smtp.username")
+		smtpPassword    = viper.GetString("smtp.password")
+		smtpFromAddress = viper.GetString("smtp.fromAddress")
+		smtpToAddresses = viper.GetStringSlice("smtp.toAddresses")
 	)
 
 	logrus.WithFields(logrus.Fields{
@@ -109,6 +131,8 @@ func main() {
 		"Database Host":      dbHost,
 		"Database Port":      dbPort,
 		"Database Username":  dbUsername,
+		"SMTP Enabled":       smtpEnabled,
+		"SMTP Schedule":      smtpSchedule,
 	}).Info("Config Initialised")
 
 	svr, err := server.New(
@@ -128,6 +152,54 @@ func main() {
 
 	if httpProxyEnabled {
 		go httpProxyServer(httpProxyPort, addr)
+	}
+
+	if smtpEnabled {
+		mailClient, err := mail.New(mail.Config{
+			SMTPHost:        smtpHost,
+			SMTPPort:        smtpPort,
+			SMTPUsername:    smtpUsername,
+			SMTPPassword:    smtpPassword,
+			SMTPFromAddress: smtpFromAddress,
+			SMTPToAddresses: smtpToAddresses,
+		}, "template.html")
+		if err != nil {
+			log.Fatalf("Error creating new mail client: %+v", err)
+		}
+
+		// Parse the SMTP Schedule and make sure it's valid
+		if _, err := cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow).Parse(smtpSchedule); err != nil {
+			log.Fatalf("Error parsing smtp schedule: %+v", err)
+		}
+
+		c := cron.New()
+		c.AddFunc(smtpSchedule, func() {
+			rw, err := svr.RandomWord(context.Background(), &v1alpha1.RandomWordRequest{})
+			if err != nil {
+				logrus.WithFields(logrus.Fields{
+					"error": err,
+				}).Error("Error getting random word")
+			}
+
+			if rw.GetWord().GetId() == 0 && rw.GetWord().GetWord() == "" && rw.GetWord().GetCustomDefinition() == "" {
+				logrus.Info("No words have been added - skipping")
+				return
+			}
+
+			if err := mailClient.SendMailFromTemplate("My Word Of The Day", struct {
+				Word       string
+				Definition string
+			}{
+				Word:       rw.GetWord().GetWord(),
+				Definition: rw.GetWord().GetCustomDefinition(),
+			}); err != nil {
+				logrus.WithFields(logrus.Fields{
+					"error": err,
+				}).Error("Error sending mail")
+			}
+		})
+
+		c.Start()
 	}
 
 	listener, err := net.Listen("tcp", addr)
