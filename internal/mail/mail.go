@@ -26,12 +26,20 @@ type Client struct {
 	template *pkgtemplate.Template
 }
 
-func New(c Config) (*Client, error) {
+// New accepts Config and an optional template and returns a configered Client
+//
+// If a template is not required, simply pass an empty string
+func New(c Config, template string) (*Client, error) {
 	auth := smtp.PlainAuth("", c.SMTPFromAddress, c.SMTPPassword, c.SMTPHost)
 
-	t, err := pkgtemplate.ParseFiles("template.html")
-	if err != nil {
-		return nil, err
+	var t *pkgtemplate.Template
+	if template != "" {
+		var err error
+
+		t, err = pkgtemplate.ParseFiles(template)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return &Client{
@@ -45,19 +53,13 @@ func New(c Config) (*Client, error) {
 	}, nil
 }
 
-func (c *Client) SendMail(subject string) error {
+func (c *Client) SendMailFromTemplate(subject string, data interface{}) error {
 	mimeHeaders := "MIME-version: 1.0;\nContent-Type: text/html; charset=\"UTF-8\";\n\n"
 
 	var body bytes.Buffer
 	body.Write([]byte(fmt.Sprintf("Subject: %s \n%s\n\n", subject, mimeHeaders)))
 
-	c.template.Execute(&body, struct {
-		Name    string
-		Message string
-	}{
-		Name:    "Simon Drake",
-		Message: "This is a test message in a HTML template",
-	})
+	c.template.Execute(&body, data)
 
 	addr := fmt.Sprintf("%s:%s", c.host, c.port)
 	return smtp.SendMail(addr, c.auth, c.from, c.to, body.Bytes())

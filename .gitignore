@@ -8,6 +8,7 @@ integration-tests-db/
 
 # Local development files
 local.env
+rewrite.sh
 
 # OS Files
 # .DS_Store is a file that stores custom attributes of its containing folder, such as the position of icons or the choice of a background image.

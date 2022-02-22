@@ -162,7 +162,7 @@ func main() {
 			SMTPPassword:    smtpPassword,
 			SMTPFromAddress: smtpFromAddress,
 			SMTPToAddresses: smtpToAddresses,
-		})
+		}, "template.html")
 		if err != nil {
 			log.Fatalf("Error creating new mail client: %+v", err)
 		}
@@ -174,7 +174,13 @@ func main() {
 
 		c := cron.New()
 		c.AddFunc(smtpSchedule, func() {
-			err := mailClient.SendMail("This is a subject")
+			err := mailClient.SendMailFromTemplate("This is a subject", struct {
+				Word       string
+				Definition string
+			}{
+				Word:       "floccinaucinihilipilification",
+				Definition: "Estimation of worthlessness",
+			})
 			if err != nil {
 				logrus.WithFields(logrus.Fields{
 					"error": err,
